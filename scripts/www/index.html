@@ -1,88 +1,481 @@
 <!DOCTYPE html>
-<html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <link rel="stylesheet" href="./static/css/styles.css" />
-        <meta
-            http-equiv="Content-Security-Policy"
-            content="default-src * 'unsafe-inline' 'unsafe-eval'"
-        />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Tauri App</title>
-        <script src="./static/js/main.js"></script>
-    </head>
-    <body>
-        <main class="container">
-            <h1>Welcome to TauriMan</h1>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>学生成绩智能分析系统 (排名修正版)</title>
+    <script src="https://unpkg.com/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+    
+    <style>
+        /* 样式保持不变 */
+        :root { --primary-color: #1f6aa5; --bg-color: #f0f0f0; --sidebar-bg: #2b2b2b; --accent-green: #2e8b57; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: "Segoe UI", Roboto, sans-serif; }
+        body { background-color: var(--bg-color); height: 100vh; display: flex; overflow: hidden; }
+        .sidebar { width: 260px; background-color: var(--sidebar-bg); color: white; display: flex; flex-direction: column; padding: 20px; flex-shrink: 0; }
+        .app-title { font-size: 22px; font-weight: bold; margin-bottom: 30px; padding-bottom: 15px; border-bottom: 1px solid #444; }
+        .sidebar-section { margin-bottom: 20px; }
+        .btn-upload { display: block; width: 100%; padding: 10px; background: #444; color: white; text-align: center; border-radius: 6px; cursor: pointer; border: 1px solid #555; font-size: 14px; }
+        .btn-upload:hover { background: #555; }
+        .file-status { margin-top: 8px; font-size: 12px; color: #aaa; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .file-status.loaded { color: #4cd137; }
+        .btn-analyze { background: var(--accent-green); color: white; border: none; padding: 12px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 16px; margin-top: 20px; }
+        .btn-analyze:hover { background: #1e5b39; }
+        .main-content { flex-grow: 1; padding: 30px; display: flex; flex-direction: column; overflow-y: auto; }
+        .header-title { font-size: 24px; font-weight: bold; color: #333; margin-bottom: 20px; }
+        .settings-card { background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        .settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; max-width: 800px; }
+        .form-group { display: flex; flex-direction: column; }
+        .form-group label { font-size: 13px; color: #666; margin-bottom: 5px; }
+        .form-input { padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+        .checkbox-group { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+        .log-area { flex-grow: 1; background: #222; color: #0f0; font-family: monospace; padding: 15px; border-radius: 6px; overflow-y: auto; font-size: 12px; margin-top: 20px; }
+        .progress-container { margin-top: 20px; }
+        .progress-bar-bg { width: 100%; height: 8px; background: #e0e0e0; border-radius: 4px; overflow: hidden; }
+        .progress-bar-fill { height: 100%; background: var(--primary-color); width: 0%; transition: width 0.3s; }
+        
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000; }
+        .modal { background: white; padding: 20px; border-radius: 8px; max-width: 400px; width: 90%; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
+        .modal-btn { padding: 8px 16px; background: var(--primary-color); color: white; border: none; border-radius: 4px; cursor: pointer; float: right; margin-top: 10px;}
+        .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.9); z-index: 500; display: none; justify-content: center; align-items: center; font-size: 20px; font-weight: bold; color: var(--primary-color); }
+        input[type="file"] { display: none; }
+    </style>
+</head>
+<body>
 
-            <div class="row">
-                <a
-                    href="https://tauri.app"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                >
-                    <img
-                        src="./assets/tauri.svg"
-                        class="logo tauri"
-                        alt="Tauri logo"
-                    />
-                </a>
-                <a
-                    href="https://pakeplus.com/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                >
-                    <img
-                        src="https://hk.gh-proxy.org/https://github.com/Sjj1024/PakePlus/blob/main/app-icon.png"
-                        class="logo vanilla"
-                        alt="JavaScript logo"
-                    />
-                </a>
+    <aside class="sidebar">
+        <div class="app-title">成绩分析<br>系统 (排名修正)</div>
+        <div class="sidebar-section">
+            <label for="input-student" class="btn-upload">上传学生成绩Excel</label>
+            <input type="file" id="input-student" accept=".xlsx, .xls">
+            <div id="status-student" class="file-status">未选择文件</div>
+        </div>
+        <div class="sidebar-section">
+            <label for="input-teacher" class="btn-upload">上传教师信息Excel</label>
+            <input type="file" id="input-teacher" accept=".xlsx, .xls">
+            <div id="status-teacher" class="file-status">未选择文件</div>
+        </div>
+        <div style="flex-grow: 1;"></div>
+        <button id="btn-analyze" class="btn-analyze">开始计算并导出</button>
+    </aside>
+
+    <main class="main-content">
+        <h2 class="header-title">参数设置</h2>
+        <div class="settings-card">
+            <div class="settings-grid">
+                <div class="form-group">
+                    <label>前N名学生数量 (默认100):</label>
+                    <input type="number" id="param-top-n" class="form-input" value="100">
+                </div>
+                <div class="form-group">
+                    <label>头部提取百分比 (默认90%):</label>
+                    <input type="number" id="param-percent" class="form-input" value="90">
+                </div>
+                <div class="form-group">
+                    <label>及格率阈值 % (默认60):</label>
+                    <input type="number" id="param-pass" class="form-input" value="60">
+                </div>
+                <div class="form-group">
+                    <label>优秀率阈值 % (默认80):</label>
+                    <input type="number" id="param-exc" class="form-input" value="80">
+                </div>
             </div>
-            <p>Click to get data</p>
-            <form class="row" id="greet-form">
-                <input id="greet-input" placeholder="Enter a name..." />
-                <button type="submit" id="getdata">GET DATA</button>
-            </form>
-            <div class="functions">
-                <a href="./book.html" target="_self">跳转到book.html</a>
-                <a
-                    href="https://www.baidu.com"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    >跳到百度blank
-                </a>
-                <a
-                    href="https://www.baidu.com"
-                    target="_self"
-                    rel="noopener noreferrer"
-                >
-                    跳到百度self
-                </a>
-                <button onclick="sayHello()">点击我</button>
-                <button onclick="sayHello()">下载文件</button>
-                <button onclick="sayHello()">上传文件</button>
-                <button onclick="sayHello()">访问相机</button>
-                <button onclick="sayHello()">访问麦克风</button>
-                <button onclick="sayHello()">访问相册</button>
-                <button class="btn" onclick="openWechat()">打开微信</button>
-                <button class="btn" onclick="openWechatScan()">
-                    打开扫一扫
-                </button>
-                <button class="btn" onclick="openZhihu()">打开知乎</button>
-                <button onclick="sayHello()">打开抖音</button>
-                <button onclick="sayHello()">用浏览器打开</button>
-                <button>打开知乎</button>
+            <div class="checkbox-group">
+                <input type="checkbox" id="param-round" checked>
+                <label for="param-round">人数计算采用四舍五入</label>
             </div>
-            <p id="greet-msg"></p>
-            <img src="./static/image/cursor.jpeg" alt="logo" />
-            <video
-                src="https://hk.gh-proxy.org/https://github.com/Sjj1024/PakePlus/blob/main/docs/static/videos/pakeplus.mp4"
-                autoplay
-                controls
-                style="width: 100%; height: 100%"
-            ></video>
-            <audio src="./static/music/yin.mp3" controls></audio>
-        </main>
-    </body>
+        </div>
+        <div class="progress-container">
+            <div class="progress-bar-bg">
+                <div id="progress-fill" class="progress-bar-fill"></div>
+            </div>
+        </div>
+        <div id="log-area" class="log-area">系统就绪...<br>正在初始化核心组件，请稍候...</div>
+    </main>
+
+    <div id="msg-modal" class="modal-overlay">
+        <div class="modal">
+            <h3 id="modal-title">提示</h3>
+            <p id="modal-content">内容</p>
+            <button class="modal-btn" onclick="document.getElementById('msg-modal').style.display='none'">确定</button>
+        </div>
+    </div>
+
+    <div id="loading" class="loading-overlay">正在处理数据...</div>
+
+    <script src="https://unpkg.com/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+
+    <script>
+        if (typeof XLSX === 'undefined') {
+            alert("错误：核心库加载失败！\n请检查您的网络连接是否正常。\n如果您处于公司内网，可能无法访问 unpkg.com。\n请尝试使用手机热点打开此页面。");
+        } else {
+            log("核心组件加载完成，可以开始使用。");
+        }
+
+        let studentData = null;
+        let teacherData = null;
+
+        function log(msg) {
+            const logArea = document.getElementById('log-area');
+            const time = new Date().toLocaleTimeString();
+            logArea.innerHTML += `[${time}] ${msg}<br>`;
+            logArea.scrollTop = logArea.scrollHeight;
+        }
+        function setProgress(p) { document.getElementById('progress-fill').style.width = p + '%'; }
+        function showModal(title, content) {
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('modal-content').innerText = content;
+            document.getElementById('msg-modal').style.display = 'flex';
+        }
+
+        function formatSheet(ws) {
+            if (!ws['!ref']) return;
+            const range = XLSX.utils.decode_range(ws['!ref']);
+            const borderStyle = {
+                top: { style: "thin", color: { auto: 1 } },
+                bottom: { style: "thin", color: { auto: 1 } },
+                left: { style: "thin", color: { auto: 1 } },
+                right: { style: "thin", color: { auto: 1 } }
+            };
+
+            for (let R = range.s.r; R <= range.e.r; ++R) {
+                for (let C = range.s.c; C <= range.e.c; ++C) {
+                    const cellRef = XLSX.utils.encode_cell({ r: R, c: C });
+                    if (!ws[cellRef]) ws[cellRef] = { t: 's', v: '' };
+                    ws[cellRef].s = {
+                        border: borderStyle,
+                        alignment: { vertical: "center", horizontal: "center" }
+                    };
+                    if (R === 0) ws[cellRef].s.font = { bold: true };
+                }
+            }
+
+            const colWidths = [];
+            for (let C = range.s.c; C <= range.e.c; ++C) {
+                let maxLen = 10;
+                const sampleRows = Math.min(range.e.r, 20);
+                for (let R = range.s.r; R <= sampleRows; ++R) {
+                    const cellRef = XLSX.utils.encode_cell({ r: R, c: C });
+                    const cell = ws[cellRef];
+                    if (cell && cell.v) {
+                        const len = String(cell.v).length;
+                        const visualLen = len + (String(cell.v).match(/[\u4e00-\u9fa5]/g) || []).length;
+                        if (visualLen > maxLen) maxLen = visualLen;
+                    }
+                }
+                colWidths.push({ wch: Math.min(maxLen + 4, 50) });
+            }
+            ws['!cols'] = colWidths;
+        }
+
+        document.getElementById('input-student').addEventListener('change', (e) => handleFile(e.target.files[0], 'student'));
+        document.getElementById('input-teacher').addEventListener('change', (e) => handleFile(e.target.files[0], 'teacher'));
+
+        function handleFile(file, type) {
+            if (!file) return;
+            if (typeof XLSX === 'undefined') {
+                showModal("错误", "核心组件尚未加载完成或加载失败，请刷新页面重试。");
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const wb = XLSX.read(e.target.result, { type: 'array' });
+                    const jsonData = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+                    if (type === 'student') {
+                        studentData = jsonData;
+                        const el = document.getElementById('status-student');
+                        el.innerText = file.name;
+                        el.classList.add('loaded');
+                        log(`已加载学生表: ${file.name}`);
+                    } else {
+                        teacherData = jsonData;
+                        const el = document.getElementById('status-teacher');
+                        el.innerText = file.name;
+                        el.classList.add('loaded');
+                        log(`已加载教师表: ${file.name}`);
+                    }
+                } catch (err) {
+                    console.error(err);
+                    showModal("文件读取错误", "无法解析该Excel文件，请检查文件格式是否正确。");
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        document.getElementById('btn-analyze').addEventListener('click', async function() {
+            if (!studentData || !teacherData) {
+                showModal("提示", "请先上传两个Excel文件");
+                return;
+            }
+            if (typeof XLSX === 'undefined') {
+                showModal("错误", "核心组件加载失败，无法进行计算。");
+                return;
+            }
+
+            try {
+                document.getElementById('loading').style.display = 'flex';
+                await new Promise(r => setTimeout(r, 50)); 
+
+                const topN = parseInt(document.getElementById('param-top-n').value) || 100;
+                const headPercent = (parseFloat(document.getElementById('param-percent').value) || 90) / 100.0;
+                const useRounding = document.getElementById('param-round').checked;
+                const passThresh = (parseFloat(document.getElementById('param-pass').value) || 60) / 100.0;
+                const excThresh = (parseFloat(document.getElementById('param-exc').value) || 80) / 100.0;
+
+                setProgress(10);
+                log("正在处理数据...");
+
+                let df = JSON.parse(JSON.stringify(studentData));
+                df = df.map(row => {
+                    const n = {};
+                    Object.keys(row).forEach(k => n[k.trim()] = row[k]);
+                    return n;
+                });
+                df = df.filter(r => r['姓名'] && r['班级']);
+                df.forEach(r => r['班级'] = String(r['班级']));
+
+                const baseCols = ['姓名', '班级'];
+                let allCols = Object.keys(df[0] || {});
+                let dynamicSubjects = allCols.filter(c => !baseCols.includes(c));
+                if (dynamicSubjects.includes('总分')) dynamicSubjects = dynamicSubjects.filter(c => c !== '总分');
+                const validSubjects = dynamicSubjects;
+                const statsSubjects = [...validSubjects, '总分'];
+
+                df.forEach(row => {
+                    validSubjects.forEach(s => {
+                        let v = parseFloat(row[s]);
+                        row[s] = isNaN(v) ? 0 : v;
+                    });
+                    let sum = 0;
+                    validSubjects.forEach(s => sum += row[s]);
+                    row['总分'] = sum;
+                });
+                df.sort((a, b) => b['总分'] - a['总分']);
+                
+                // ==========================
+                // 修正排名逻辑：使用 Pandas rank(method='min')
+                // ==========================
+                // 逻辑：当分数不同时，新的排名 = 当前索引 + 1
+                // 例如分数: 100, 90, 90, 80
+                // 排名: 1, 2, 2, 4 (跳过3)
+                for (let i = 0; i < df.length; i++) {
+                    if (i > 0 && df[i]['总分'] !== df[i-1]['总分']) {
+                        df[i]['年级排名'] = i + 1;
+                    } else if (i === 0) {
+                        df[i]['年级排名'] = 1;
+                    } else {
+                        df[i]['年级排名'] = df[i-1]['年级排名'];
+                    }
+                }
+
+                const teacherMap = {};
+                teacherData.forEach(row => {
+                    const cls = String(row['班级']).trim();
+                    const subj = String(row['科目']).trim();
+                    const teacher = String(row['老师']).trim();
+                    let fs = parseFloat(row['满分']);
+                    if (isNaN(fs)) fs = 100.0;
+                    const target = (subj === '班主任') ? '总分' : subj;
+                    teacherMap[`${cls}_${target}`] = { teacher, fullScore: fs };
+                });
+
+                const getFullScore = (cls, subj) => {
+                    const key = `${cls}_${subj}`;
+                    if (teacherMap[key]) return teacherMap[key].fullScore;
+                    if (subj === '总分') {
+                        let total = 0;
+                        validSubjects.forEach(s => {
+                            const k = `${cls}_${s}`;
+                            total += (teacherMap[k] ? teacherMap[k].fullScore : 100);
+                        });
+                        return total;
+                    }
+                    return 100.0;
+                };
+                const getTeacherName = (cls, subj) => teacherMap[`${cls}_${subj}`] ? teacherMap[`${cls}_${subj}`].teacher : '';
+
+                const classStatsStore = {};
+                const wb = XLSX.utils.book_new();
+
+                // Sheet 1
+                const sheet1Rows = df.map(row => {
+                    const r = { '班级': row['班级'], '姓名': row['姓名'] };
+                    validSubjects.forEach(s => r[s] = row[s]);
+                    r['总分'] = row['总分'];
+                    r['排名'] = row['年级排名'];
+                    return r;
+                });
+                let ws1 = XLSX.utils.json_to_sheet(sheet1Rows);
+                formatSheet(ws1);
+                XLSX.utils.book_append_sheet(wb, ws1, "年级排名");
+
+                // Sheet 2 (Top N)
+                const topNRows = sheet1Rows.slice(0, topN);
+                const classCounts = {};
+                topNRows.forEach(r => classCounts[r['班级']] = (classCounts[r['班级']] || 0) + 1);
+                const summaryRows = Object.keys(classCounts).map(cls => ({ '班级': cls, '数量': classCounts[cls] }));
+
+                let ws2 = XLSX.utils.json_to_sheet(topNRows);
+                const startCol = Object.keys(topNRows[0]).length; 
+                XLSX.utils.sheet_add_json(ws2, summaryRows, { origin: {r:0, c:startCol} });
+                formatSheet(ws2);
+                XLSX.utils.book_append_sheet(wb, ws2, `前${topN}名详情`);
+
+                setProgress(40);
+
+                // Class Sheets
+                const grouped = {};
+                df.forEach(row => {
+                    const cls = row['班级'];
+                    if(!grouped[cls]) grouped[cls] = [];
+                    grouped[cls].push(row);
+                });
+                const sortedClasses = Object.keys(grouped).sort();
+
+                for (const cls of sortedClasses) {
+                    const clsDf = grouped[cls];
+                    clsDf.sort((a, b) => a['年级排名'] - b['年级排名']);
+                    // 班级排名是序号，不处理并列
+                    clsDf.forEach((row, i) => row['班级排名'] = i + 1);
+
+                    const clsMain = clsDf.map(row => {
+                        const r = { '班级': row['班级'], '姓名': row['姓名'] };
+                        validSubjects.forEach(s => r[s] = row[s]);
+                        r['总分'] = row['总分'];
+                        r['班级排名'] = row['班级排名'];
+                        r['年级排名'] = row['年级排名'];
+                        return r;
+                    });
+
+                    const totalStu = clsDf.length;
+                    let count = totalStu * headPercent;
+                    if (useRounding) count = Math.round(count); else count = Math.floor(count);
+                    if (count === 0) count = 1;
+
+                    const clsTop = clsDf.slice(0, count);
+
+                    const statsData = {};
+                    const clsStatsRow = {};
+
+                    statsSubjects.forEach(subj => {
+                        const fullScore = getFullScore(cls, subj);
+                        const scores = clsTop.map(r => r[subj] || 0);
+                        const avg = scores.reduce((a,b)=>a+b,0) / scores.length;
+                        const passCnt = scores.filter(s => s >= fullScore * passThresh).length;
+                        const excCnt = scores.filter(s => s >= fullScore * excThresh).length;
+                        const passRate = (passCnt / count) * 100;
+                        const excRate = (excCnt / count) * 100;
+                        const evalScore = avg * 0.6 + passRate * 0.2 + excRate * 0.2;
+
+                        statsData[subj] = {
+                            '平均分': parseFloat(avg.toFixed(2)),
+                            '及格率（%）': parseFloat(passRate.toFixed(2)),
+                            '优秀率（%）': parseFloat(excRate.toFixed(2)),
+                            '评估总分': parseFloat(evalScore.toFixed(2))
+                        };
+                        clsStatsRow[subj] = evalScore;
+                    });
+                    classStatsStore[cls] = clsStatsRow;
+
+                    let wsCls = XLSX.utils.json_to_sheet(clsMain);
+
+                    const statsHeader = ["指标", ...statsSubjects];
+                    const metrics = ["平均分", "及格率（%）", "优秀率（%）", "评估总分"];
+                    const statsAoa = [statsHeader];
+                    metrics.forEach(m => {
+                        const row = [m];
+                        statsSubjects.forEach(s => row.push(statsData[s][m]));
+                        statsAoa.push(row);
+                    });
+
+                    const startRowStats = clsMain.length + 1;
+                    XLSX.utils.sheet_add_aoa(wsCls, statsAoa, { origin: startRowStats });
+                    
+                    formatSheet(wsCls);
+                    XLSX.utils.book_append_sheet(wb, wsCls, String(cls));
+                }
+
+                setProgress(70);
+
+                // 教师评定_班级排序 (修正排名逻辑)
+                const ranks = {};
+                statsSubjects.forEach(subj => {
+                    const pairs = sortedClasses.map(c => ({c, s: classStatsStore[c][subj]}));
+                    pairs.sort((a,b) => b.s - a.s);
+                    
+                    const rMap = {};
+                    for(let i=0; i<pairs.length; i++) {
+                        // 同样应用 method='min' 逻辑
+                        if (i > 0 && pairs[i].s !== pairs[i-1].s) {
+                            rMap[pairs[i].c] = i + 1;
+                        } else if (i === 0) {
+                            rMap[pairs[i].c] = 1;
+                        } else {
+                            rMap[pairs[i].c] = rMap[pairs[i-1].c];
+                        }
+                    }
+                    ranks[subj] = rMap;
+                });
+
+                const tcRows = sortedClasses.map(cls => {
+                    const row = { '班级': cls };
+                    statsSubjects.forEach(subj => {
+                        const teacher = getTeacherName(cls, subj);
+                        const score = classStatsStore[cls][subj];
+                        const rank = ranks[subj][cls];
+                        if (subj === '总分') {
+                            row['班主任教师'] = teacher; row['总分'] = score; row['班级总分名次'] = rank;
+                        } else {
+                            row[`${subj}教师`] = teacher; row[subj] = score; row[`${subj}名次`] = rank;
+                        }
+                    });
+                    return row;
+                });
+                let wsTc = XLSX.utils.json_to_sheet(tcRows);
+                formatSheet(wsTc);
+                XLSX.utils.book_append_sheet(wb, wsTc, "教师评定_班级排序");
+
+                // 教师评定_评估分数排序
+                const evalRows = [];
+                for (let i = 0; i < sortedClasses.length; i++) {
+                    const row = {};
+                    statsSubjects.forEach(subj => {
+                        const pairs = sortedClasses.map(c => ({c, s: classStatsStore[c][subj]}));
+                        pairs.sort((a,b) => b.s - a.s);
+                        let targetCls = "", score = 0, rank = "", teacher = "";
+                        if (i < pairs.length) {
+                            targetCls = pairs[i].c; score = pairs[i].s; rank = i + 1;
+                            teacher = getTeacherName(targetCls, subj);
+                        }
+                        if (subj === '总分') {
+                            row["班级总分名次"] = rank; row["班主任教师"] = teacher;
+                            row["班级总分班级"] = targetCls; row["总分"] = score;
+                        } else {
+                            row[`${subj}名次`] = rank; row[`${subj}教师`] = teacher;
+                            row[`${subj}班级`] = targetCls; row[subj] = score;
+                        }
+                    });
+                    evalRows.push(row);
+                }
+                let wsEval = XLSX.utils.json_to_sheet(evalRows);
+                formatSheet(wsEval);
+                XLSX.utils.book_append_sheet(wb, wsEval, "教师评定_评估分数排序");
+
+                setProgress(90);
+                log("正在导出...");
+                XLSX.writeFile(wb, "成绩分析结果.xlsx");
+                
+                setProgress(100);
+                document.getElementById('loading').style.display = 'none';
+                showModal("完成", "数据处理完成并已导出！");
+
+            } catch (e) {
+                console.error(e);
+                document.getElementById('loading').style.display = 'none';
+                showModal("错误", "发生错误: " + e.message);
+                log("Error: " + e.message);
+            }
+        });
+    </script>
+</body>
 </html>
